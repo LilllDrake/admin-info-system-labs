@@ -1,0 +1,46 @@
+groups:
+  - name: red-demo-alerts
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_errors_total{job="red-demo"}[1m]))
+            /
+            sum(rate(http_requests_total{job="red-demo"}[1m]))
+          ) * 100 > 20
+        for: 10s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокая доля ошибок"
+          description: "Доля ошибок выше 20%. Текущее значение: {{ $value }}%"
+
+      - alert: HighRequestRate
+        expr: |
+          sum(rate(http_requests_total{job="red-demo"}[1m])) > 1
+        for: 10s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокая интенсивность запросов"
+          description: "Сервис получает больше одного запроса в секунду. Текущее значение: {{ $value }} запросов/с"
+
+      - alert: HighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(
+                http_request_duration_seconds_bucket{
+                  job="red-demo",
+                  route="/api/delay"
+                }[1m]
+              )
+            )
+          ) > 1
+        for: 10s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокое время ответа p95"
+          description: "p95 для /api/delay превышает одну секунду. Текущее значение: {{ $value }} с"

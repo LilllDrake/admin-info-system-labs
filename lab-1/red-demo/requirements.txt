@@ -1,0 +1,4 @@
+aiohttp==3.13.3
+prometheus-client==0.24.1
+opentelemetry-sdk==1.39.1
+opentelemetry-exporter-otlp-proto-http==1.39.1

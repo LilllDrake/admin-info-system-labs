@@ -1,0 +1,73 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
+  prometheus:
+    image: prom/prometheus:v3.13.2
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus 
+      - ./alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+  
+  grafana:
+    image: grafana/grafana:13.2.1
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+  
+  loki:
+    image: grafana/loki:3.7.0
+    command: ["-config.file=/etc/loki/loki.yml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+
+  promtail:
+    image: grafana/promtail:3.6.11
+    command: -config.file=/etc/promtail/promtail.yaml
+    volumes:
+      - ./promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - promtail_data:/var/lib/promtail
+      - /var/run/docker.sock:/var/run/docker.sock:ro 
+  
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+
+  otel-collector:
+    image: otel/opentelemetry-collector:0.160.0
+    volumes:
+      - ./otel-collector.yml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      - jaeger
+
+  webhook:
+    image: mendhak/http-https-echo:31
+
+  alertmanager:
+    image: prom/alertmanager:v0.33.1
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    depends_on:
+      - webhook
+
+volumes:
+  prometheus_data:
+  grafana_data: 
+  loki_data:
+  promtail_data:
+  alertmanager_data:

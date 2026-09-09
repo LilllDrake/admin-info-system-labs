@@ -1,0 +1,29 @@
+groups:
+  - name: kafka-alerts
+    rules:
+      - alert: KafkaConsumerLagHigh
+        expr: sum(kafka_consumergroup_lag{consumergroup="pickers", topic="orders"}) > 10
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Накопилась очередь заказов"
+          description: "Группа pickers отстаёт больше чем на 10 сообщений в топике orders"
+
+      - alert: NoPickerConsumers
+        expr: sum(kafka_consumergroup_members{consumergroup="pickers"}) < 1 or absent(kafka_consumergroup_members{consumergroup="pickers"})
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Нет активных сборщиков"
+          description: "В группе pickers не осталось активных потребителей"
+
+      - alert: KafkaBrokerUnavailable
+        expr: kafka_brokers < 1 or absent(kafka_brokers)
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kafka недоступна"
+          description: "Kafka Exporter не обнаружил ни одного брокера"

@@ -1,0 +1,149 @@
+services:
+  user-service:
+    build: ./user-service
+    ports:
+      - "8000:8000"
+    environment:
+      INSTANCE_NAME: user-service-1
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: orders
+    depends_on:
+      topic-manager:
+        condition: service_completed_successfully # не запустит приложение, пока topic-manager успешно не создаст топик
+  
+  picker-service:
+    build: ./picker-service
+    ports:
+      - "8001:8001"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: orders
+      KAFKA_GROUP_ID: pickers
+      INSTANCE_NAME: picker-1
+      PROCESSING_SECONDS: "2"
+    depends_on:
+      topic-manager:
+        condition: service_completed_successfully
+
+  picker-service-2:
+    build: ./picker-service
+    ports:
+      - "8002:8001"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: orders
+      KAFKA_GROUP_ID: pickers
+      INSTANCE_NAME: picker-2
+      PROCESSING_SECONDS: "2"
+    depends_on:
+      topic-manager:
+        condition: service_completed_successfully
+
+  picker-service-3:
+    build: ./picker-service
+    ports:
+      - "8003:8001"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: orders
+      KAFKA_GROUP_ID: pickers
+      INSTANCE_NAME: picker-3
+      PROCESSING_SECONDS: "2"
+    depends_on:
+      topic-manager:
+        condition: service_completed_successfully
+
+  kafka:
+    image: apache/kafka:4.3.1
+    hostname: kafka 
+    environment:
+      KAFKA_NODE_ID: 1 # уникальный id узла
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093 # число 1 - node_1, контроллер с таким айди доступен по адресу kafka:9093 
+      KAFKA_PROCESS_ROLES: broker,controller # роли кафки
+
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093 # принимать подключения от других контейнеров типа 0.0.0.0
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092 # адрес, который сообщает кафка продюсеру и консюмер
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false" # отключение автоматического осздания топика
+
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+  
+  topic-manager:
+    build: ./topic-manager
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TOPIC_NAME: orders
+      TOPIC_PARTITIONS: "2"
+      TOPIC_REPLICATION_FACTOR: "1"
+      TOPIC_RETENTION_MS: "604800000"
+    depends_on:
+      kafka:
+        condition: service_started
+    restart: "no"
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.1
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_NAME: local-kafka
+    depends_on: 
+      topic-manager: 
+        condition: service_completed_successfully
+
+  prometheus:
+    image: prom/prometheus:v3.13.2
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus 
+      - ./alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+
+  grafana:
+    image: grafana/grafana:13.2.1
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+  webhook:
+    image: mendhak/http-https-echo:31
+
+  alertmanager:
+    image: prom/alertmanager:v0.33.1
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    depends_on:
+      - webhook
+  
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    command:
+      - "--kafka.server=kafka:9092"
+    ports:
+      - "9308:9308"
+    depends_on:
+      topic-manager:
+        condition: service_completed_successfully
+
+volumes:
+  kafka_data:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+

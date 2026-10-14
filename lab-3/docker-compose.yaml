@@ -1,0 +1,126 @@
+services:
+  postgres:
+    container_name: postgres_master
+    image: postgres:18.6
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=my_database
+      - POSTGRES_PASSWORD=my_database
+    
+    volumes:
+      - POSTGRES_STANDBY_DATA:/var/lib/postgresql
+      - ./init-primary.sql:/docker-entrypoint-initdb.d/01-init-primary.sql:ro
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+
+    command:
+      - "postgres"
+      - "-c"
+      - "hba_file=/etc/postgresql/pg_hba.conf"
+      - "-c"
+      - "wal_level=replica"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "wal_keep_size=256MB"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "my_database"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  postgresql-slave:
+    image: postgres:18.6
+    ports:
+      - '5433:5432'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: replica
+    volumes:
+      - POSTGRES_STANDBY_DATA_V2:/var/lib/postgresql
+      - ./init-standby.sh:/usr/local/bin/init-standby.sh:ro
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    command:
+      - "bash"
+      - "/usr/local/bin/init-standby.sh"
+  app:
+    build: ./app
+    ports:
+      - "127.0.0.1:8080:8000"
+    environment:
+      WRITE_DB_HOST: ${WRITE_DB_HOST:-postgres}
+      WRITE_DB_PORT: ${WRITE_DB_PORT:-5432}
+      READ_DB_HOST: ${WRITE_DB_HOST:-postgresql-slave}
+      READ_DB_PORT: ${READ_DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-my_database}
+      DB_USER: ${DB_USER:-app_user}
+      DB_PASSWORD: ${DB_PASSWORD:-apppppppppp}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgresql-slave:
+        condition: service_started
+
+
+  postgres_exporter:
+    container_name: exporter_container
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    command:
+      - --config.file=/etc/postgres_exporter/postgres_exporter.yml
+    environment:
+      DATA_SOURCE_URI: "postgres:5432/my_database?sslmode=disable"
+      DATA_SOURCE_USER: "postgres"
+      DATA_SOURCE_PASS: "my_database"
+    volumes:
+      - ./postgres_exporter.yml:/etc/postgres_exporter/postgres_exporter.yml:ro
+    ports:
+      - "9187:9187"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 500M
+
+  prometheus:
+    image: prom/prometheus:v3.13.2
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus 
+      - ./alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+
+  grafana:
+    image: grafana/grafana:13.2.1
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+  alertmanager:
+    image: prom/alertmanager:v0.33.1
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    depends_on:
+      - webhook
+
+  webhook:
+    image: mendhak/http-https-echo:31
+
+
+volumes:
+  POSTGRES_DB_DATA:
+  POSTGRES_STANDBY_DATA:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+  POSTGRES_STANDBY_DATA_V2:
+

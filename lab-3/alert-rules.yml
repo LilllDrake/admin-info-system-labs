@@ -1,0 +1,54 @@
+groups:
+  - name: postgres-lab
+    rules:
+      - alert: PostgresUnavailable
+        expr: |
+          (min by (job, instance) (
+            pg_up{instance="postgres_exporter:9187"}
+          ) == 0)
+          or on (job, instance)
+          (up{instance="postgres_exporter:9187"} == 0)
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Нет доступа к PostgreSQL или экспортеру"
+          description: "Проверь базу, экспортер, сеть и настройки подключения."
+
+      - alert: PostgresReplicationLag
+        expr: |
+          (
+            max by (instance) (
+              pg_stat_replication_pg_wal_lsn_diff{instance="postgres_exporter:9187"}
+            ) > 1048576
+            or absent(
+              pg_stat_replication_pg_wal_lsn_diff{instance="postgres_exporter:9187"}
+            )
+          )
+          and on (instance) (pg_up{instance="postgres_exporter:9187"} == 1)
+          and on (instance) (up{instance="postgres_exporter:9187"} == 1)
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Реплика отстаёт или её метрика отсутствует"
+          description: "Отставание превышает 1 MiB либо метрика репликации отсутствует. Проверь standby и сбор статистики."
+
+      - alert: PostgresConnectionsHigh
+        expr: |
+          (
+            100 * sum by (instance) (
+              pg_stat_database_numbackends{instance="postgres_exporter:9187"}
+            )
+            / sum by (instance) (
+              pg_settings_max_connections{instance="postgres_exporter:9187"}
+            ) > 80
+          )
+          and on (instance) (pg_up{instance="postgres_exporter:9187"} == 1)
+          and on (instance) (up{instance="postgres_exporter:9187"} == 1)
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Занято больше 80% подключений"
+          description: "При достижении лимита приложение не сможет открыть новые соединения."

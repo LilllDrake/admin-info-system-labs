@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Заказы — лабораторная 3</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Сервис заказов</h1>
+      <p>Создаём записи на primary, читаем список со standby.</p>
+
+      <section>
+        <h2>Новый заказ</h2>
+        <form id="order-form">
+          <label for="description">Название заказа</label>
+          <input id="description" value="Малиновое варенье" maxlength="120" required>
+          <button id="create-button" type="submit">Создать запись</button>
+        </form>
+      </section>
+
+      <section>
+        <h2>Нагрузка</h2>
+        <label for="load-count">Количество записей</label>
+        <input id="load-count" type="number" min="1" max="100000" value="100000" required>
+        <button id="load-button" type="button">Налить нагрузку</button>
+        <p class="hint">Каждая запись сохраняется отдельной транзакцией.</p>
+      </section>
+
+      <p id="message" role="status" aria-live="polite">Готово к работе.</p>
+
+      <section>
+        <div class="heading">
+          <h2>Записи</h2>
+          <button id="refresh-button" type="button">Обновить</button>
+        </div>
+        <p id="source">Загружаем список с реплики…</p>
+        <p class="hint">Последние 100 записей. Список обновляется каждые 2 секунды.</p>
+        <p id="read-error" role="alert"></p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Заказ</th><th>Создан</th></tr></thead>
+            <tbody id="orders-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
